@@ -279,6 +279,10 @@ $.extend($.validator, {
 	},
 
 	messages: {
+		nowhitespace: "No white space please",
+		userformat:"Please enter only letters, numbers,. or _",
+		lettersonly: "Letters only please",
+		remote_exist: $.validator.format("{0} is already taken, please try something else."),
 		required: "This field is required.",
 		remote: "Please fix this field.",
 		email: "Please enter a valid email address.",
@@ -1176,6 +1180,69 @@ $.extend($.validator, {
 				}
 			}, param));
 			return "pending";
+		},
+		// metodo buscar datos que ya existen.
+		remote_exist: function( value, element, param ) {
+			if ( this.optional(element) ) {
+				return "dependency-mismatch";
+			}
+
+			var previous = this.previousValue(element);
+			if (!this.settings.messages[element.name] ) {
+				this.settings.messages[element.name] = {};
+			}
+			previous.originalMessage = this.settings.messages[element.name].remote_exist;
+			this.settings.messages[element.name].remote_exist = previous.message;
+
+			param = typeof param === "string" && {url:param} || param;
+
+			if ( previous.old === value ) {
+				return previous.valid;
+			}
+
+			previous.old = value;
+			var validator = this;
+			this.startRequest(element);
+			var data = {};
+			data[element.name] = value;
+			$.ajax($.extend(true, {
+				url: param,
+				mode: "abort",
+				port: "validate" + element.name,
+				dataType: "json",
+				data: data,
+				success: function( response ) {
+					validator.settings.messages[element.name].remote_exist = previous.originalMessage;
+					var valid = response === true || response === "true";
+					if ( valid ) {
+						var submitted = validator.formSubmitted;
+						validator.prepareElement(element);
+						validator.formSubmitted = submitted;
+						validator.successList.push(element);
+						delete validator.invalid[element.name];
+						validator.showErrors();
+					} else {
+						var errors = {};
+						var message = response || validator.defaultMessage( element, "remote_exist" );
+						errors[element.name] = previous.message = $.isFunction(message) ? message(value) : message;
+						validator.invalid[element.name] = true;
+						validator.showErrors(errors);
+					}
+					previous.valid = valid;
+					validator.stopRequest(element, valid);
+				}
+			}, param));
+			return "pending";
+		},
+		lettersonly: function(value, element) {
+			
+			return this.optional(element) || /^[a-z]+$/i.test(value);
+		},
+		userformat:function(value, element) {
+			return this.optional(element) || (/^[a-zA-Z0-9._]+$/i.test(value));
+		},
+		nowhitespace:function(value, element) {
+			return this.optional(element) || /^\S+$/i.test(value);
 		}
 
 	}
